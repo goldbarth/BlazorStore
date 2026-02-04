@@ -1,0 +1,90 @@
+﻿
+@inject IPlaylistService PlaylistService
+
+@if (Open)
+{
+    <div class="drawer-overlay" @onclick="Cancel"></div>
+}
+
+<div class="drawer-panel @(Open ? "open" : "")">
+    <div class="drawer-header">
+        <MudText Typo="Typo.h6">Video zur Playlist hinzufügen</MudText>
+    </div>
+    <div class="drawer-content">
+        <MudTextField @bind-Value="_title"
+                      Label="Titel"
+                      Required="true"
+                      RequiredError="Titel ist erforderlich"/>
+        <MudTextField @bind-Value="_videoUrl"
+                      Label="YouTube URL"
+                      Required="true"
+                      RequiredError="YouTube URL ist erforderlich"
+                      Placeholder="https://www.youtube.com/watch?v=..."/>
+        <div class="d-flex justify-end gap-2 mt-4">
+            <MudButton OnClick="Cancel" Color="Color.Default">Abbrechen</MudButton>
+            <MudButton OnClick="Submit"
+                       Color="Color.Primary"
+                       Disabled="@(string.IsNullOrWhiteSpace(_videoUrl) || string.IsNullOrWhiteSpace(_title))">
+                Hinzufügen
+            </MudButton>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+    [Parameter] public Guid? SelectedPlaylistId { get; set; }
+    [Parameter] public EventCallback<VideoItem> OnVideoAdded { get; set; }
+    
+    private string _videoUrl = string.Empty;
+    private string _title = string.Empty;
+
+    private async Task Submit()
+    {
+        if (SelectedPlaylistId == null) return;
+
+        string youtubeId = ExtractYouTubeId(_videoUrl);
+        if (string.IsNullOrEmpty(youtubeId)) return;
+
+        var video = new VideoItem
+        {
+            Id = Guid.NewGuid(),
+            YouTubeId = youtubeId,
+            Title = _title,
+            ThumbnailUrl = $"https://img.youtube.com/vi/{youtubeId}/mqdefault.jpg"
+        };
+
+        await PlaylistService.AddVideoToPlaylistAsync(SelectedPlaylistId.Value, video);
+        await OnVideoAdded.InvokeAsync(video);
+        await Close();
+        ResetForm();
+    }
+
+    private string ExtractYouTubeId(string url)
+    {
+        // goldbarth: Easy extraction - can be expanded
+        var uri = new Uri(url);
+        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+        return query["v"] ?? string.Empty;
+    }
+
+    private async Task Close()
+    {
+        Open = false;
+        await OpenChanged.InvokeAsync(Open);
+    }
+
+    private void Cancel()
+    {
+        ResetForm();
+        _ = Close();
+    }
+
+    private void ResetForm()
+    {
+        _videoUrl = string.Empty;
+        _title = string.Empty;
+    }
+
+}

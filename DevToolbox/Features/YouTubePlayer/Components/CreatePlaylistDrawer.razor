@@ -1,0 +1,65 @@
+@using DevToolbox.Features.YouTubePlayer.Models
+
+@if (Open)
+{
+    <div class="drawer-overlay" @onclick="Cancel"></div>
+}
+
+<div class="drawer-panel @(Open ? "open" : "")">
+    <div class="drawer-header">
+        <MudText Typo="Typo.h6">Create Playlist</MudText>
+    </div>
+    <div class="drawer-content">
+        <MudTextField @bind-Value="_playlistName"
+                      Label="Title"
+                      Required="true"
+                      RequiredError="Title is required"
+                      Variant="Variant.Outlined"
+                      Margin="Margin.Dense" />
+        <MudTextField @bind-Value="_playlistDescription"
+                      Label="Description (optional)"
+                      Lines="3"
+                      Variant="Variant.Outlined"
+                      Margin="Margin.Dense"
+                      Class="mt-3" />
+        <div class="d-flex justify-end gap-2 mt-4">
+            <MudButton OnClick="Cancel">Cancel</MudButton>
+            <MudButton Color="Color.Primary"
+                       OnClick="Submit"
+                       Disabled="string.IsNullOrWhiteSpace(_playlistName)">
+                Create
+            </MudButton>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+    [Parameter] public EventCallback<Playlist> OnPlaylistCreated { get; set; }
+
+    private string _playlistName = string.Empty;
+    private string _playlistDescription = string.Empty;
+
+    private async Task Submit()
+    {
+        var playlist = new Playlist
+        {
+            Name = _playlistName,
+            Description = _playlistDescription
+        };
+
+        await OnPlaylistCreated.InvokeAsync(playlist);
+        await CloseDrawer();
+    }
+
+    private async Task Cancel() => await CloseDrawer();
+
+    private async Task CloseDrawer()
+    {
+        _playlistName = string.Empty;
+        _playlistDescription = string.Empty;
+        Open = false;
+        await OpenChanged.InvokeAsync(false);
+    }
+}
