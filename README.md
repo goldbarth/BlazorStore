@@ -1,6 +1,6 @@
 # The Dev Toolbox is a Blazor Server application with a collection of useful tools.
 
-### This project is intended as a portfolio showcase.
+### The goal is to learn and understand Blazor and Entity Framework better.
 
 ## Tools
 
