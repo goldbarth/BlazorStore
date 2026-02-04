@@ -1,10 +1,22 @@
 using DevToolbox.Components;
+using DevToolbox.Data;
+using DevToolbox.Features.YouTubePlayer.Service;
+using Microsoft.EntityFrameworkCore;
+using MudBlazor.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
+
+// Add database connection
+builder.Services.AddDbContext<ApplicationDbContext>(options =>
+    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+// Register Services
+builder.Services.AddScoped<IPlaylistService, PlaylistService>();
+builder.Services.AddMudServices();
 
 var app = builder.Build();
 

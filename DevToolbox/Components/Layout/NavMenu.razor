@@ -1,29 +1,43 @@
-﻿<div class="top-row ps-3 navbar navbar-dark">
-    <div class="container-fluid">
-        <a class="navbar-brand" href="">DevToolbox</a>
+<div class="sidebar-container @(_isCollapsed ? "collapsed" : "expanded")">
+    <div class="top-row navbar navbar-dark">
+        <button class="toggle-btn" @onclick="ToggleSidebar" title="@(_isCollapsed ? "Menu ausklappen" : "Menu einklappen")">
+            <span class="bi bi-hamburger-menu" aria-hidden="true"></span>
+        </button>
+        <a class="navbar-brand" href="">Toolbox</a>
+    </div>
+
+    <input type="checkbox" title="Navigation menu" class="navbar-toggler"/>
+
+    <div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
+        <nav class="nav flex-column">
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="" Match="NavLinkMatch.All" title="Home">
+                    <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span>
+                    @if (!_isCollapsed)
+                    {
+                        <span class="nav-text">Home</span>
+                    }
+                </NavLink>
+            </div>
+
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="youtube" title="YouTube Player">
+                    <span class="bi bi-youtube-nav-menu" aria-hidden="true"></span>
+                    @if (!_isCollapsed)
+                    {
+                        <span class="nav-text">Player</span>
+                    }
+                </NavLink>
+            </div>
+        </nav>
     </div>
 </div>
 
-<input type="checkbox" title="Navigation menu" class="navbar-toggler"/>
+@code {
+    private bool _isCollapsed;
 
-<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
-    <nav class="nav flex-column">
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
-            </NavLink>
-        </div>
-
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="counter">
-                <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span> Counter
-            </NavLink>
-        </div>
-
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="weather">
-                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Weather
-            </NavLink>
-        </div>
-    </nav>
-</div>
+    private void ToggleSidebar()
+    {
+        _isCollapsed = !_isCollapsed;
+    }
+}

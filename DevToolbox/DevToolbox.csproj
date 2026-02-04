@@ -8,12 +8,15 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <Folder Include="Features\YouTubePlayer\Components\" />
-      <Folder Include="Features\YouTubePlayer\Service\" />
       <Folder Include="Shared\" />
     </ItemGroup>
 
     <ItemGroup>
+      <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.2">
+        <PrivateAssets>all</PrivateAssets>
+        <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      </PackageReference>
+      <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.2" />
       <PackageReference Include="MudBlazor" Version="8.15.0" />
     </ItemGroup>
 

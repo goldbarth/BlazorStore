@@ -58,3 +58,14 @@ h1:focus {
 .form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
     text-align: start;
 }
+
+/* YouTube Player - List Hover Effects */
+.playlist-list .mud-list-item:hover,
+.video-list .mud-list-item:hover {
+    background-color: #e0e0e0 !important;
+}
+
+.playlist-list .mud-list-item[style*="background-color: #007bff"]:hover,
+.video-list .mud-list-item[style*="background-color: #007bff"]:hover {
+    background-color: #0056b3 !important;
+}
