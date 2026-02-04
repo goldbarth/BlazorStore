@@ -179,16 +179,13 @@ dotnet watch run
 <PackageReference Include="MudBlazor" Version="8.15.0" />
 ```
 
----
 ## 🤝 Mitwirken
 
 Da dies ein persönliches Portfolio-Projekt ist, nehme ich derzeit keine Pull Requests an. Feedback und Anregungen sind jedoch immer willkommen!
 
----
 ## 📜 Lizenz
 Dieses Projekt ist unter der MIT-Lizenz lizenziert.
 
----
 ## 👤 Kontakt
 ### 📧 Kontakt
 - [![Portfolio](https://img.shields.io/badge/GitHub%20Pages-121013?logo=github&logoColor=white)](https://goldbarth.github.io/Portfolio/#/)
