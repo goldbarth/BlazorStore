@@ -4,8 +4,8 @@ on:
   push:
     branches: [main, master]
   schedule:
-    - cron: '0 */6 * * *'  # Alle 6 Stunden
-  workflow_dispatch:  # Manueller Trigger
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
 
 jobs:
   update-readme:
@@ -21,7 +21,6 @@ jobs:
 
       - name: Update README with recent features
         run: |
-          # Hole die letzten 5 feat-Commits
           COMMITS=$(git log --oneline --grep="^feat" --pretty=format:'| %s | %ad | [%h](https://github.com/goldbarth/DevToolbox/commit/%H) |' --date=format:'%Y-%m-%d %H:%M:%S CET' -n 5)
           
           if [ -z "$COMMITS" ]; then
@@ -29,12 +28,10 @@ jobs:
             exit 0
           fi
           
-          # Erstelle die Tabelle
           TABLE="| Feature | Commit Date | Commit |
-|---------|-------------|--------|
-$COMMITS"
+          |---------|-------------|--------|
+          $COMMITS"
           
-          # Ersetze den Bereich zwischen den Markierungen
           awk -v table="$TABLE" '
             /<!-- START_RECENTLY_WORKED_ON -->/ {
               print
