@@ -54,11 +54,9 @@
 
     <div class="video-player-section">
         <div class="video-player">
-            @if (_currentVideo != null)
-            {
-                <div id="youtube-player-container"></div>
-            }
-            else
+            <div id="youtube-player-container"></div>
+            
+            @if (_playerState is PlayerState.Empty)
             {
                 <div class="no-video">
                     <p>Select a playlist and a video</p>
@@ -155,11 +153,14 @@
     private bool _createPlaylistDrawerOpen;
     private bool _addVideoDrawerOpen;
     private bool _isPlaying;
-    private bool _playerInitialized;
-
-    private List<VideoItem> _videoItems = new();
+    
+    private PlayerState _playerState = new PlayerState.Empty();
+    
+    private List<VideoItem> _videoItems = [];
     private DotNetObjectReference<YouTubePlayer>? _dotNetRef;
     private bool _sortableInitialized;
+    private VideoItem? _pendingVideoToLoad; // Neu: Video, das nach dem Rendering geladen werden soll
+    private bool _pendingAutoplay;
 
     private bool CanPlayNext => _currentVideo != null && CurrentVideoIndex < _videoItems.Count - 1;
     private bool CanPlayPrevious => _currentVideo != null && CurrentVideoIndex > 0;
