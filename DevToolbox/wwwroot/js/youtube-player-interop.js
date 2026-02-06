@@ -3,6 +3,7 @@ window.YouTubePlayerInterop = {
     dotNetRef: null,
     isApiReady: false,
     pendingVideoId: null,
+    currentVideoId: null,
 
     init: function (dotNetRef) {
         this.dotNetRef = dotNetRef;
@@ -60,6 +61,12 @@ window.YouTubePlayerInterop = {
     },
 
     onPlayerStateChange: function (event) {
+        if (this.dotNetRef) {
+            const vid = this.currentVideoId;
+            this.dotNetRef.invokeMethodAsync('OnPlayerStateChanged', event.data, vid)
+                .catch(err => console.error("OnPlayerStateChanged failed:", err));
+        }
+        
         // YT.PlayerState.ENDED = 0
         if (event.data === YT.PlayerState.ENDED) {
             if (this.dotNetRef) {
@@ -69,6 +76,8 @@ window.YouTubePlayerInterop = {
     },
 
     loadVideo: function (videoId, autoplay) {
+        this.currentVideoId = videoId;
+        
         if (this.player && typeof this.player.loadVideoById === 'function') {
             if (autoplay) {
                 this.player.loadVideoById(videoId);
