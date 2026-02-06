@@ -2,31 +2,30 @@ window.SortableInterop = {
     instances: {},
 
     init: function (elementId, dotNetRef) {
-        const element = document.getElementById(elementId);
-        if (!element) {
-            console.error('SortableInterop: Element not found:', elementId);
-            return;
-        }
-        
-        if (this.instances[elementId]) {
-            this.instances[elementId].destroy();
-        }
+        const el = document.getElementById(elementId);
+        if (!el) return;
 
-        this.instances[elementId] = new Sortable(element, {
+        // wichtig: alte Instanz weg
+        this.destroy(elementId);
+
+        this.instances[elementId] = new Sortable(el, {
+            handle: ".drag-handle",
+
+            // OPTIONAL aber hilfreich:
+            filter: ".video-item, a, button, input, textarea, select, img",
+            preventOnFilter: false,
+
             animation: 150,
-            handle: '.drag-handle',
-            ghostClass: 'sortable-ghost',
-            chosenClass: 'sortable-chosen',
-            dragClass: 'sortable-drag',
             onEnd: function (evt) {
-                dotNetRef.invokeMethodAsync('OnSortChanged', evt.oldIndex, evt.newIndex);
+                dotNetRef.invokeMethodAsync("OnSortChanged", evt.oldIndex, evt.newIndex);
             }
         });
     },
 
     destroy: function (elementId) {
-        if (this.instances[elementId]) {
-            this.instances[elementId].destroy();
+        const inst = this.instances[elementId];
+        if (inst) {
+            inst.destroy();
             delete this.instances[elementId];
         }
     }

@@ -95,9 +95,10 @@
                 {
                     var currentVideo = video;
                     var isSelected = currentVideo.YouTubeId == _currentVideo?.YouTubeId;
-                    <div class="video-list-item @(isSelected ? "selected" : "")"
-                         data-video-id="@currentVideo.Id"
-                         @onclick="() => SelectVideo(currentVideo, true)">
+                    <div @key="video.Id"
+                         class="video-list-item @(video.YouTubeId == _currentVideo?.YouTubeId ? "selected" : "")"
+                         data-video-id="@video.Id"
+                         @onclick="@(async () => await SelectVideo(video, true))">
                         <div class="drag-handle">
                             <MudIcon Icon="@Icons.Material.Filled.DragIndicator" Size="Size.Small" />
                         </div>
@@ -235,14 +236,13 @@
 
     private async Task SelectPlaylist(Playlist playlist)
     {
-        Console.WriteLine($"Selecting playlist: {playlist.Name}");
         _selectedPlaylist = await PlaylistService.GetPlaylistByIdAsync(playlist.Id);
-
-        // VideoItems Liste aktualisieren
+        
         _videoItems = _selectedPlaylist?.VideoItems
             .OrderBy(v => v.Position)
             .ToList() ?? [];
 
+        await JS.InvokeVoidAsync("SortableInterop.destroy", "video-sortable-list");
         _sortableInitialized = false;
 
         if (_videoItems.Any())
