@@ -63,10 +63,8 @@ This project shows how I approach software development:
 
 ## 📚 Documentation
 
-- 🇬🇧 [Architecture (English)](DevToolbox/docs/en/ARCHITECTURE_EN.md)
-- 🇩🇪 [Architektur (Deutsch)](DevToolbox/docs/de/ARCHITECTURE_DE.md)
-- 🇬🇧 [Architecture Decision Records (English)](DevToolbox/docs/en/ADR_EN.md)
-- 🇩🇪 [Architecture Decision Records (Deutsch)](DevToolbox/docs/de/ADR_DE.md)
+- [Architecture](ARCHITECTURE_EN.md)
+- [Architecture Decision Records](ADR_EN.md)
 
 ## 🗺️ Roadmap
 
