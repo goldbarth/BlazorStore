@@ -24,6 +24,10 @@ public record YtAction
     public sealed record PlayerStateChanged(int YtState, string VideoId) : YtAction;
     public sealed record VideoEnded : YtAction;
     
-    // Error surface
-    public sealed record OperationFailed(string Message) : YtAction;
+    // Error handling
+    public sealed record OperationFailed(OperationError Error) : YtAction;
+    
+    // Notifications
+    public sealed record ShowNotification(Notification Notification) : YtAction;
+    public sealed record DismissNotification(Guid CorrelationId) : YtAction;
 }

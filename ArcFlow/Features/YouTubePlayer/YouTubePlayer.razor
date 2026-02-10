@@ -12,6 +12,9 @@
                 SelectedPlaylistId="SelectedPlaylistId"
                 OnSubmit="OnAddVideoSubmit" />
 
+<NotificationPanel Notifications="@State.Notifications"
+                   OnDismiss="@(async (correlationId) => await _store.Dispatch(new YtAction.DismissNotification(correlationId)))" />
+
 
 <h3>YouTube Player</h3>
 

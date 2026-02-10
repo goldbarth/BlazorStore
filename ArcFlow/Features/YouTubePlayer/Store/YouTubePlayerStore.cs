@@ -13,6 +13,8 @@ public sealed class YouTubePlayerStore
     private readonly IPlaylistService _playlistService;
     private readonly IJSRuntime _jsRuntime;
     
+    private readonly ILogger<YouTubePlayerStore> _logger;
+    
     private readonly Channel<YtAction> _actionQueue;
     private readonly CancellationTokenSource _cts = new();
     private bool _disposed;
@@ -38,11 +40,7 @@ public sealed class YouTubePlayerStore
         _playlistService = playlistService;
         _jsRuntime = jsRuntime;
         
-        State = new YouTubePlayerState(
-            Playlists: new PlaylistsState.Loading(),
-            Queue: new QueueState(),
-            Player: new PlayerState.Empty()
-        );
+        State = new YouTubePlayerState();
         
         _actionQueue = Channel.CreateUnbounded<YtAction>();
         _ = ProcessActionsAsync(_cts.Token);
@@ -112,6 +110,7 @@ public sealed class YouTubePlayerStore
     {
         var newState = action switch
         {
+            // Actions with state update
             YtAction.Initialize => HandleInitialize(state),
             YtAction.SelectPlaylist selectPlaylist => HandleSelectPlaylist(state, selectPlaylist),
             YtAction.SelectVideo selectVideo => HandleSelectVideo(state, selectVideo),
@@ -123,6 +122,11 @@ public sealed class YouTubePlayerStore
             // Actions that are ONLY processed in Effects (no state update)
             YtAction.CreatePlaylist => state,
             YtAction.AddVideo => state,
+            // Error Handling
+            YtAction.OperationFailed failed => HandleOperationFailed(state, failed),
+            // Notifications
+            YtAction.ShowNotification notification => HandleShowNotification(state, notification),
+            YtAction.DismissNotification dismiss => HandleDismissNotification(state, dismiss),
             // Compiler forces you to handle all actions
             _ => throw new UnreachableException($"Unhandled action: {action.GetType().Name}")
         };
@@ -333,21 +337,68 @@ public sealed class YouTubePlayerStore
     
     private async Task LoadAndSelectInitialPlaylist()
     {
-        var playlists = await _playlistService.GetAllPlaylistsAsync();
-        await Dispatch(new YtAction.PlaylistsLoaded(playlists.ToImmutableList()));
+        var context = OperationContext.Create("LoadAndSelectInitialPlaylist");
+        
+        try
+        {
+            var playlists = await _playlistService.GetAllPlaylistsAsync();
+            await Dispatch(new YtAction.PlaylistsLoaded(playlists.ToImmutableList()));
 
-        if (playlists.Count > 0)
-            await Dispatch(new YtAction.SelectPlaylist(playlists[0].Id));
+            if (playlists.Count > 0)
+                await Dispatch(new YtAction.SelectPlaylist(playlists[0].Id));
+        }
+        catch (Exception ex)
+        {
+            await Dispatch(new YtAction.OperationFailed(
+                new OperationError(
+                    ErrorCategory.Unexpected,
+                    "Failed to load initial playlists",
+                    context,
+                    ex
+                )
+            ));
+        }
     }
     
     private async Task LoadAndDispatchPlaylist(YtAction.SelectPlaylist selectPlaylist)
     {
-        var playlist = await _playlistService.GetPlaylistByIdAsync(selectPlaylist.PlaylistId);
-                
-        await Dispatch(new YtAction.PlaylistLoaded(playlist!));
+        var context = OperationContext.Create(
+            "LoadAndDispatchPlaylist",
+            playlistId: selectPlaylist.PlaylistId
+        );
+        
+        try
+        {
+            var playlist = await _playlistService.GetPlaylistByIdAsync(selectPlaylist.PlaylistId);
+            
+            if (playlist is null)
+            {
+                await Dispatch(new YtAction.OperationFailed(
+                    new OperationError(
+                        ErrorCategory.NotFound,
+                        $"Playlist with ID {selectPlaylist.PlaylistId} not found",
+                        context
+                    )
+                ));
+                return;
+            }
+                    
+            await Dispatch(new YtAction.PlaylistLoaded(playlist));
 
-        if (playlist?.VideoItems.Count != 0)
-            await Dispatch(new YtAction.SelectVideo(0, Autoplay: false));
+            if (playlist.VideoItems.Count != 0)
+                await Dispatch(new YtAction.SelectVideo(0, Autoplay: false));
+        }
+        catch (Exception ex)
+        {
+            await Dispatch(new YtAction.OperationFailed(
+                new OperationError(
+                    ErrorCategory.Unexpected,
+                    "Failed to load playlist",
+                    context,
+                    ex
+                )
+            ));
+        }
     }
     
     private async Task LoadSelectedVideo(YtAction.SelectVideo selectVideo)
@@ -356,32 +407,131 @@ public sealed class YouTubePlayerStore
         if (selectVideo.Index < 0 || selectVideo.Index >= videos.Count) return;
 
         var video = videos[selectVideo.Index];
-        await _jsRuntime.InvokeVoidAsync("YouTubePlayerInterop.loadVideo", video.YouTubeId, selectVideo.Autoplay);
+        var context = OperationContext.Create(
+            "LoadSelectedVideo",
+            videoId: video.Id,
+            index: selectVideo.Index
+        );
+        
+        try
+        {
+            await _jsRuntime.InvokeVoidAsync(
+                "YouTubePlayerInterop.loadVideo", 
+                video.YouTubeId, 
+                selectVideo.Autoplay
+                );
+        }
+        catch (JSException ex)
+        {
+            await Dispatch(new YtAction.OperationFailed(
+                new OperationError(
+                    ErrorCategory.External,
+                    $"Failed to load video '{video.Title}' in YouTube player",
+                    context,
+                    ex
+                )
+            ));
+        }
+        catch (Exception ex)
+        {
+            await Dispatch(new YtAction.OperationFailed(
+                new OperationError(
+                    ErrorCategory.Unexpected,
+                    "Unexpected error while loading video",
+                    context,
+                    ex
+                )
+            ));
+        }
     }
 
-    private async Task CreateAndSelectPlaylist(YtAction.CreatePlaylist cp)
+    private async Task CreateAndSelectPlaylist(YtAction.CreatePlaylist createPlaylist)
     {
-        var playlist = new Playlist
+        var context = OperationContext.Create("CreateAndSelectPlaylist");
+        
+        try
         {
-            Id = Guid.NewGuid(),
-            Name = cp.Name,
-            Description = cp.Description ?? string.Empty,
-            VideoItems = []
-        };
+            if (string.IsNullOrWhiteSpace(createPlaylist.Name))
+            {
+                await Dispatch(new YtAction.OperationFailed(
+                    new OperationError(
+                        ErrorCategory.Validation,
+                        "Playlist name cannot be empty.",
+                        context
+                    )
+                ));
+                return;
+            }
+            
+            var playlist = new Playlist
+            {
+                Id = Guid.NewGuid(),
+                Name = createPlaylist.Name,
+                Description = createPlaylist.Description ?? string.Empty,
+                VideoItems = []
+            };
 
-        await _playlistService.CreatePlaylistAsync(playlist);
+            await _playlistService.CreatePlaylistAsync(playlist);
+            
+            _logger.LogInformation(
+                "Playlist created: {PlaylistId} | Name: {Name} | CorrelationId: {CorrelationId}",
+                playlist.Id,
+                playlist.Name,
+                context.CorrelationId
+            );
 
-        var playlists = await _playlistService.GetAllPlaylistsAsync();
-        await Dispatch(new YtAction.PlaylistsLoaded(playlists.ToImmutableList()));
-
-        await Dispatch(new YtAction.SelectPlaylist(playlist.Id));
+            var playlists = await _playlistService.GetAllPlaylistsAsync();
+            await Dispatch(new YtAction.PlaylistsLoaded(playlists.ToImmutableList()));
+            await Dispatch(new YtAction.SelectPlaylist(playlist.Id));
+            
+            // Success notification
+            await Dispatch(new YtAction.ShowNotification(
+                new Notification(
+                    NotificationSeverity.Success,
+                    $"Playlist '{playlist.Name}' successfully created.",
+                    context.CorrelationId,
+                    DateTime.UtcNow
+                )
+            ));
+        }
+        catch (Exception ex)
+        {
+            await Dispatch(new YtAction.OperationFailed(
+                new OperationError(
+                    ErrorCategory.Unexpected,
+                    "Failed to create playlist",
+                    context,
+                    ex
+                )
+            ));
+        }
     }
     
     private async Task UpdatePlaylistVideoPositionsAsync()
     {
         var pid = State.Queue.SelectedPlaylistId;
         if (pid is null) return;
-        await _playlistService.UpdateVideoPositionsAsync(pid.Value, State.Queue.Videos.ToList());
+        
+        var context = OperationContext.Create(
+            "UpdatePlaylistVideoPositions", 
+            playlistId: pid
+            );
+        
+        try
+        {
+            await _playlistService.UpdateVideoPositionsAsync(pid.Value, State.Queue.Videos.ToList());
+        }
+        catch (Exception ex)
+        {
+            await Dispatch(new YtAction.OperationFailed(
+                new OperationError(
+                    ErrorCategory.Unexpected,
+                    "Failed to update video positions",
+                    context,
+                    ex
+                )
+            ));
+        }
     }
     
     private async Task SelectNextVideoWithAutoplay()
@@ -392,44 +542,175 @@ public sealed class YouTubePlayerStore
     
     private async Task AddVideoToPlaylist(YtAction.AddVideo addVideo)
     {
+        var context = OperationContext.Create(
+            "AddVideoToPlaylist",
+            playlistId: addVideo.PlaylistId
+        );
+        
         var youtubeId = ExtractYouTubeId(addVideo.Url);
         if (string.IsNullOrWhiteSpace(youtubeId))
         {
-            // goldbarth: Dispatch OperationFailed
+            await Dispatch(new YtAction.OperationFailed(
+                new OperationError(
+                    ErrorCategory.Validation,
+                    "Invalid YouTube-URL.",
+                    context
+                )
+            ));
             return;
         }
 
-        var video = new VideoItem
+        try
         {
-            Id = Guid.NewGuid(),
-            YouTubeId = youtubeId,
-            Title = addVideo.Title,
-            ThumbnailUrl = $"https://img.youtube.com/vi/{youtubeId}/mqdefault.jpg"
-        };
+            var video = new VideoItem
+            {
+                Id = Guid.NewGuid(),
+                YouTubeId = youtubeId,
+                Title = addVideo.Title,
+                ThumbnailUrl = $"https://img.youtube.com/vi/{youtubeId}/mqdefault.jpg"
+            };
 
-        await _playlistService.AddVideoToPlaylistAsync(addVideo.PlaylistId, video);
+            await _playlistService.AddVideoToPlaylistAsync(addVideo.PlaylistId, video);
+            
+            _logger.LogInformation(
+                "Video added: {VideoId} | YouTubeId: {YouTubeId} | PlaylistId: {PlaylistId} | CorrelationId: {CorrelationId}",
+                video.Id,
+                video.YouTubeId,
+                addVideo.PlaylistId,
+                context.CorrelationId
+            );
 
-        var playlist = await _playlistService.GetPlaylistByIdAsync(addVideo.PlaylistId);
-        await Dispatch(new YtAction.PlaylistLoaded(playlist!));
-                
-        var idx = playlist!.VideoItems
-            .OrderBy(v => v.Position)
-            .ToList()
-            .FindIndex(v => v.Id == video.Id);
+            var playlist = await _playlistService.GetPlaylistByIdAsync(addVideo.PlaylistId);
+            
+            if (playlist is null)
+            {
+                await Dispatch(new YtAction.OperationFailed(
+                    new OperationError(
+                        ErrorCategory.NotFound,
+                        $"Playlist {addVideo.PlaylistId} not found after adding video",
+                        context with { VideoId = video.Id }
+                    )
+                ));
+                return;
+            }
+            
+            await Dispatch(new YtAction.PlaylistLoaded(playlist));
+                    
+            var idx = playlist.VideoItems
+                .OrderBy(v => v.Position)
+                .ToList()
+                .FindIndex(v => v.Id == video.Id);
 
-        if (idx >= 0)
-            await Dispatch(new YtAction.SelectVideo(idx, Autoplay: false));
+            if (idx >= 0)
+                await Dispatch(new YtAction.SelectVideo(idx, Autoplay: false));
+            
+            // Success notification
+            await Dispatch(new YtAction.ShowNotification(
+                new Notification(
+                    NotificationSeverity.Success,
+                    $"Video '{video.Title}' added.",
+                    context.CorrelationId,
+                    DateTime.UtcNow
+                )
+            ));
+        }
+        catch (Exception ex)
+        {
+            await Dispatch(new YtAction.OperationFailed(
+                new OperationError(
+                    ErrorCategory.Unexpected,
+                    "Failed to add video to playlist",
+                    context,
+                    ex
+                )
+            ));
+        }
     }
 
     private string ExtractYouTubeId(string url)
     {
         // goldbarth: Easy extraction - can be expanded
-        var uri = new Uri(url);
-        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
-        return query["v"] ?? string.Empty;
+        try
+        {
+            var uri = new Uri(url);
+            var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+            return query["v"] ?? string.Empty;
+        }
+        catch
+        {
+            return string.Empty;
+        }
     }
     
     #endregion
     
+    private YouTubePlayerState HandleOperationFailed(YouTubePlayerState state, YtAction.OperationFailed failed)
+    {
+        // Log structured error
+        LogOperationError(failed.Error);
+        
+        // Map to user-friendly notification
+        var notification = MapErrorToNotification(failed.Error);
+        
+        return state with 
+        { 
+            Notifications = state.Notifications.Add(notification)
+        };
+    }
+    
+    private void LogOperationError(OperationError error)
+    {
+        var logLevel = error.Category switch
+        {
+            ErrorCategory.Validation => LogLevel.Warning,
+            ErrorCategory.NotFound => LogLevel.Warning,
+            ErrorCategory.Transient => LogLevel.Warning,
+            ErrorCategory.External => LogLevel.Error,
+            ErrorCategory.Unexpected => LogLevel.Error,
+            _ => LogLevel.Information
+        };
 
+        _logger.Log(
+            logLevel,
+            error.InnerException,
+            "Operation failed: {Operation} | Category: {Category} | CorrelationId: {CorrelationId} | PlaylistId: {PlaylistId} | VideoId: {VideoId} | Message: {Message}",
+            error.Context.Operation,
+            error.Category,
+            error.Context.CorrelationId,
+            error.Context.PlaylistId,
+            error.Context.VideoId,
+            error.Message
+        );
+    }
+    
+    private Notification MapErrorToNotification(OperationError error)
+    {
+        var userMessage = error.Category switch
+        {
+            ErrorCategory.Validation => error.Message,
+            ErrorCategory.NotFound => "The requested resource was not found.",
+            ErrorCategory.Transient => "Network error. Please try again.",
+            ErrorCategory.External => "Error loading YouTube player.",
+            ErrorCategory.Unexpected => "An unexpected error has occurred.",
+            _ => "An error has occurred."
+        };
+
+        return Notification.FromError(error, userMessage);
+    }
+    
+    private YouTubePlayerState HandleShowNotification(YouTubePlayerState state, YtAction.ShowNotification action)
+    {
+        return state with 
+        { 
+            Notifications = state.Notifications.Add(action.Notification)
+        };
+    }
+    
+    private YouTubePlayerState HandleDismissNotification(YouTubePlayerState state, YtAction.DismissNotification action)
+    {
+        return state with 
+        { 
+            Notifications = state.Notifications.RemoveAll(n => n.CorrelationId == action.CorrelationId)
+        };
+    }
 }
