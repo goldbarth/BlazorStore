@@ -71,12 +71,10 @@ This project shows how I approach software development:
 > No deadlines, no promises — just the direction this project is heading.
 
 **Current Focus**
-- Stabilize and harden the store architecture
-- Document architectural decisions (ADRs)
-
-**Next**
 - Error handling strategy — unified pattern for store errors and UI feedback
 - Undo/redo for queue actions — demonstrates time-travel capability of the store architecture
+
+**Next**
 - Shuffle/repeat modes — extend existing queue logic with playback strategies
 - Polish UI — responsiveness, edge cases, micro-interactions
 

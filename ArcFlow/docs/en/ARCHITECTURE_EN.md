@@ -33,16 +33,16 @@ Drawers and pages do not write to the database.
 Typical layout:
 
 - `Features/YouTubePlayer/Store/`
-  - `YouTubePlayerStore.cs` – owns state, dispatch, reduce, and effects
+    - `YouTubePlayerStore.cs` – owns state, dispatch, reduce, and effects
 - `Features/YouTubePlayer/State/`
-  - `YouTubePlayerState.cs` (root state)
-  - sub-states (e.g. `PlaylistsState`, `QueueState`, `PlayerState`)
-  - `YtAction.cs` (actions)
+    - `YouTubePlayerState.cs` (root state)
+    - sub-states (e.g. `PlaylistsState`, `QueueState`, `PlayerState`)
+    - `YtAction.cs` (actions)
 - `Features/YouTubePlayer/Models/`
-  - domain models (e.g. `Playlist`, `VideoItem`)
+    - domain models (e.g. `Playlist`, `VideoItem`)
 - `wwwroot/js/`
-  - `youtube-player-interop.js` (YouTube IFrame API interop)
-  - `sortable-interop.js` (SortableJS integration)
+    - `youtube-player-interop.js` (YouTube IFrame API interop)
+    - `sortable-interop.js` (SortableJS integration)
 
 ---
 
@@ -56,9 +56,14 @@ Contains:
 
 The UI derives all view decisions from these values.
 
+### Immutability
+- State slices are `record` types
+- Collections are `ImmutableList<T>`
+- Changes produce new instances via `with` expressions
+
 ### Queue
 - `SelectedPlaylistId`: `Guid?`
-- `Videos`: ordered list (sorted by `Position`)
+- `Videos`: `ImmutableList<VideoItem>` (sorted by `Position`)
 - `CurrentIndex`: `int?` (current selection)
 
 ### Player
@@ -86,20 +91,44 @@ Triggered by effects:
 - `PlaylistLoaded(playlist)`
 - optional error reporting (e.g. `OperationFailed(message)`)
 
+### Action Categories
+**State-changing actions:**
+- Reducer returns new state
+- Examples: `SelectVideo`, `PlaylistLoaded`, `SortChanged`
+
+**Effect-only actions:**
+- Reducer returns unchanged state (`state`)
+- Logic runs exclusively in effects
+- Examples: `CreatePlaylist`, `AddVideo`
+- Dispatch subsequent result actions
+
 Rule of thumb:
-- **Commands** express what the user wants.
-- **Results** represent completed I/O.
+- **Commands** express what the user wants
+- **Results** represent completed I/O
 
 ---
 
 ## Store Pipeline
 
 ### Dispatch
-`Dispatch(action)` enqueues an action and processes it serially to avoid race conditions.
+`Dispatch(action)` writes actions into a `Channel<YtAction>`.
+Processing happens serially in a background task to avoid race conditions.
 
 ### Reduce (Pure)
 The reducer returns a new immutable `YouTubePlayerState`.
 No DB calls, no JS calls, no timing dependencies.
+
+**Exhaustive Pattern Matching:**
+
+```csharp
+var newState = action switch 
+{ 
+    YtAction.SelectVideo sv => HandleSelectVideo(state, sv), 
+    YtAction.CreatePlaylist => state, // Effect-only _ => throw new UnreachableException(...) 
+};
+```
+
+The compiler enforces handling of all actions.
 
 ### Effects (Async)
 Effects are triggered after reducing.
@@ -107,6 +136,12 @@ They may:
 - call services (DB, HTTP)
 - call JS interop
 - dispatch additional actions
+
+### Lifecycle
+The store implements `IDisposable`:
+- `CancellationToken` stops background processing
+- Channel is closed
+- Clean shutdown without race conditions
 
 ---
 
@@ -126,8 +161,14 @@ Allowed local UI state:
 ### Drawers
 Drawers are input components:
 - collect user input
-- emit requests to the page/store
+- emit `EventCallback` to parent component
+- parent translates requests into actions and dispatches
 - do not persist data
+
+**Why no direct dispatch?**
+- Reusability (not coupled to store)
+- Separation of concerns
+- Better testability
 
 ---
 
@@ -166,6 +207,14 @@ Therefore:
 2. Reducer updates queue and player state
 3. Effect calls JS `loadVideo`
 
+### Create Playlist
+1. Drawer emits `EventCallback<CreatePlaylistRequest>`
+2. Page dispatches `CreatePlaylist`
+3. Reducer returns unchanged state
+4. Effect writes to DB
+5. Effect dispatches `PlaylistsLoaded` (reloads)
+6. Effect dispatches `SelectPlaylist` (selects new playlist)
+
 ---
 
 ## Error Handling
@@ -175,6 +224,15 @@ Instead, the store can dispatch `OperationFailed(message)` and the UI can render
 ---
 
 ## Testing Notes
-- Reducer: unit-testable (state + action → new state)
-- Effects: testable via mocked services and asserted follow-up actions
+- **Reducer**: unit-testable (state + action → new state)
+- **Effects**: testable via mocked services and asserted follow-up actions
+- **Drawers**: component tests without store dependency
 
+---
+
+## Debug Features
+
+Available in `DEBUG` mode:
+- **State History**: Last 50 transitions (timestamp, action, before/after)
+- Access via `Store.GetHistory()`
+- Useful for time-travel debugging

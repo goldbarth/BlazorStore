@@ -53,3 +53,48 @@ Drag & Drop ist ein DOM-Problem, kein UI-State-Problem. SortableJS arbeitet dire
 
 **Konsequenzen**
 Blazor "weiß" während des Drags nichts von der DOM-Manipulation — erst das `onEnd`-Event fließt als Action in den Store. Das erfordert bewusstes Lifecycle-Handling, hält aber den Datenfluss sauber und performant.
+
+---
+
+## ADR-005: ImmutableList für State-Collections
+
+**Entscheidung**
+Collections im State (z.B. `Videos`, `Playlists`) werden als `ImmutableList<T>` statt `List<T>` modelliert.
+
+**Begründung**
+`ImmutableList` erzwingt unveränderliche Collections und verhindert versehentliche Mutationen außerhalb des Reducers. Jede Änderung erzeugt eine neue Collection-Instanz, was Change Detection vereinfacht und Race Conditions bei parallelen Zugriffen ausschließt. Die geringfügig höhere Allokation ist bei der Projektgröße vernachlässigbar.
+
+**Konsequenzen**
+- Reducer müssen explizit `.ToImmutableList()` aufrufen nach Mutationen
+- Collections sind garantiert threadsafe für Lesezugriffe
+- Basis für künftige Features wie Undo/Redo ist gelegt
+
+---
+
+## ADR-006: Channel-basierte Action-Queue
+
+**Entscheidung**
+Actions werden über einen `Channel<YtAction>` serialisiert statt über `SemaphoreSlim`.
+
+**Begründung**
+`Channel<T>` ist idiomatischer für Producer-Consumer-Patterns in modernem .NET und bietet eingebaute Backpressure-Mechanismen. Die Action-Verarbeitung läuft in einer dedizierten Background-Task, die über `CancellationToken` sauber gestoppt werden kann. Dies verhindert Race Conditions und garantiert FIFO-Reihenfolge.
+
+**Konsequenzen**
+- Alle Actions werden seriell verarbeitet (keine Parallelität)
+- Sauberes Lifecycle-Management über `IDisposable`
+- Einfachere Testbarkeit durch deterministisches Verhalten
+
+---
+
+## ADR-007: Exhaustive Pattern Matching im Reducer
+
+**Entscheidung**
+Der Reducer verwendet exhaustive pattern matching mit `UnreachableException` für unbehandelte Actions.
+
+**Begründung**
+Der Compiler erzwingt die explizite Behandlung aller Action-Typen. Neue Actions können nicht versehentlich "vergessen" werden. Actions, die nur Side-Effects auslösen (z.B. `CreatePlaylist`, `AddVideo`), geben explizit den unveränderten State zurück. Dies macht die Absicht im Code deutlich.
+
+**Konsequenzen**
+- Compiler-garantierte Action-Vollständigkeit
+- Klare Dokumentation, welche Actions State ändern und welche nicht
+- Runtime-Exception bei vergessenen Actions (statt stilles Ignorieren)

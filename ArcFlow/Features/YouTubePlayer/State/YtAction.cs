@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using ArcFlow.Features.YouTubePlayer.Models;
 
 namespace ArcFlow.Features.YouTubePlayer.State;
@@ -7,7 +8,7 @@ public record YtAction
     // App/Feature lifecycle
     public sealed record Initialize : YtAction;
     // Data loaded (results)
-    public sealed record PlaylistsLoaded(IReadOnlyList<Playlist> Playlists) : YtAction;
+    public sealed record PlaylistsLoaded(ImmutableList<Playlist> Playlists) : YtAction;
     public sealed record PlaylistLoaded(Playlist Playlist) : YtAction;
     
     // User intent (commands)

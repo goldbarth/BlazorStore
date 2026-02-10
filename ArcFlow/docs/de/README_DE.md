@@ -71,12 +71,10 @@ Dieses Projekt zeigt, wie ich an Software-Entwicklung herangehe:
 > Kein Zeitplan, keine Versprechen — nur die Richtung, in die das Projekt wächst.
 
 **Aktueller Fokus**
-- Store-Architektur stabilisieren und härten
-- Architektur-Entscheidungen dokumentieren (ADRs)
-
-**Als Nächstes**
 - Fehlerbehandlungsstrategie — einheitliches Pattern für Store-Fehler und UI-Feedback
 - Undo/Redo für Queue-Actions — zeigt Zeitreise-Fähigkeit der Store-Architektur
+
+**Als Nächstes**
 - Shuffle/Repeat-Modi — Erweiterung der bestehenden Queue-Logik um Playback-Strategien
 - UI polieren — Responsiveness, Edge Cases, Micro-Interactions
 
