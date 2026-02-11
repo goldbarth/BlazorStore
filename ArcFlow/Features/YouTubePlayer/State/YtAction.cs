@@ -33,6 +33,16 @@ public record YtAction
     public sealed record ShowNotification(Notification Notification) : YtAction;
     public sealed record DismissNotification(Guid CorrelationId) : YtAction;
 
+    // Playback navigation (user intent)
+    public sealed record ShuffleSet(bool Enabled, int? Seed = null) : YtAction;
+    public sealed record RepeatSet(RepeatMode Mode) : YtAction;
+    public sealed record NextRequested : YtAction;
+    public sealed record PrevRequested : YtAction;
+
+    // Playback navigation (result)
+    public sealed record PlaybackAdvanced(Guid ToItemId, AdvanceReason Reason) : YtAction;
+    public sealed record PlaybackStopped(StopReason Reason) : YtAction;
+
     // Undo/Redo
     public sealed record UndoRequested : YtAction;
     public sealed record RedoRequested : YtAction;

@@ -103,4 +103,38 @@ public class QueueSnapshotTests
         Assert.Empty(snapshot.VideoPositions);
         Assert.Null(snapshot.CurrentIndex);
     }
+
+    [Fact]
+    public void RoundTrip_PreservesPlaybackFields()
+    {
+        var v0 = MakeVideo(0);
+        var v1 = MakeVideo(1);
+        var playlistId = Guid.NewGuid();
+        var currentItemId = v1.Id;
+        var shuffleOrder = ImmutableList.Create(v1.Id, v0.Id);
+        var playbackHistory = ImmutableList.Create(v0.Id);
+
+        var queue = new QueueState
+        {
+            SelectedPlaylistId = playlistId,
+            Videos = ImmutableList.Create(v0, v1),
+            CurrentIndex = 1,
+            RepeatMode = RepeatMode.All,
+            ShuffleEnabled = true,
+            CurrentItemId = currentItemId,
+            ShuffleOrder = shuffleOrder,
+            PlaybackHistory = playbackHistory,
+            ShuffleSeed = 42
+        };
+
+        var snapshot = QueueSnapshot.FromQueueState(queue);
+        var restored = snapshot.ToQueueState();
+
+        Assert.Equal(RepeatMode.All, restored.RepeatMode);
+        Assert.True(restored.ShuffleEnabled);
+        Assert.Equal(currentItemId, restored.CurrentItemId);
+        Assert.Equal(shuffleOrder, restored.ShuffleOrder);
+        Assert.Equal(playbackHistory, restored.PlaybackHistory);
+        Assert.Equal(42, restored.ShuffleSeed);
+    }
 }

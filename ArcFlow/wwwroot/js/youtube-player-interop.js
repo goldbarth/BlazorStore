@@ -76,10 +76,17 @@ window.YouTubePlayerInterop = {
     },
 
     loadVideo: function (videoId, autoplay) {
+        var isSameVideo = videoId === this.currentVideoId;
         this.currentVideoId = videoId;
-        
+
         if (this.player && typeof this.player.loadVideoById === 'function') {
-            if (autoplay) {
+            if (isSameVideo) {
+                // Repeat One: restart same video
+                this.player.seekTo(0);
+                if (autoplay) {
+                    this.player.playVideo();
+                }
+            } else if (autoplay) {
                 this.player.loadVideoById(videoId);
             } else {
                 this.player.cueVideoById(videoId);

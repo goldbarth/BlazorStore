@@ -7,7 +7,13 @@ public sealed record QueueSnapshot(
     Guid? SelectedPlaylistId,
     ImmutableList<VideoItem> Videos,
     ImmutableList<int> VideoPositions,
-    int? CurrentIndex
+    int? CurrentIndex,
+    RepeatMode RepeatMode,
+    bool ShuffleEnabled,
+    Guid? CurrentItemId,
+    ImmutableList<Guid> ShuffleOrder,
+    ImmutableList<Guid> PlaybackHistory,
+    int ShuffleSeed
 )
 {
     public static QueueSnapshot FromQueueState(QueueState queue)
@@ -17,7 +23,13 @@ public sealed record QueueSnapshot(
             queue.SelectedPlaylistId,
             queue.Videos,
             positions,
-            queue.CurrentIndex
+            queue.CurrentIndex,
+            queue.RepeatMode,
+            queue.ShuffleEnabled,
+            queue.CurrentItemId,
+            queue.ShuffleOrder,
+            queue.PlaybackHistory,
+            queue.ShuffleSeed
         );
     }
 
@@ -33,7 +45,13 @@ public sealed record QueueSnapshot(
         {
             SelectedPlaylistId = SelectedPlaylistId,
             Videos = Videos,
-            CurrentIndex = CurrentIndex
+            CurrentIndex = CurrentIndex,
+            RepeatMode = RepeatMode,
+            ShuffleEnabled = ShuffleEnabled,
+            CurrentItemId = CurrentItemId,
+            ShuffleOrder = ShuffleOrder,
+            PlaybackHistory = PlaybackHistory,
+            ShuffleSeed = ShuffleSeed
         };
     }
 }

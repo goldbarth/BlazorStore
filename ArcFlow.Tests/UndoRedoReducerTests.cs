@@ -289,6 +289,28 @@ public class UndoRedoReducerTests
         Assert.Empty(r2.Queue.Future);
     }
 
+    [Fact]
+    public void NextRequested_DoesNotCreateUndoHistory()
+    {
+        var store = CreateStore();
+        var v0 = MakeVideo(0);
+        var v1 = MakeVideo(1);
+        var state = StateWithVideos(v0, v1) with
+        {
+            Queue = (StateWithVideos(v0, v1)).Queue with
+            {
+                CurrentIndex = 0,
+                CurrentItemId = v0.Id
+            },
+            Player = new PlayerState.Playing(v0.YouTubeId)
+        };
+
+        var result = store.Reduce(state, new YtAction.NextRequested());
+
+        Assert.Empty(result.Queue.Past);
+        Assert.Empty(result.Queue.Future);
+    }
+
     // Minimal fakes to satisfy constructor dependencies
     private class FakePlaylistService : ArcFlow.Features.YouTubePlayer.Service.IPlaylistService
     {

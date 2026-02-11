@@ -68,6 +68,10 @@
         @if (CurrentVideo is not null)
         {
             <div class="player-controls">
+                <MudIconButton Icon="@Icons.Material.Filled.Shuffle"
+                               Size="Size.Medium"
+                               Color="@(IsShuffleEnabled ? Color.Primary : Color.Default)"
+                               OnClick="ToggleShuffle"/>
                 <MudIconButton Icon="@Icons.Material.Filled.SkipPrevious"
                                Size="Size.Large"
                                Color="Color.Primary"
@@ -84,6 +88,10 @@
                                Color="Color.Primary"
                                OnClick="PlayNext"
                                Disabled="!CanPlayNext"/>
+                <MudIconButton Icon="@RepeatIcon"
+                               Size="Size.Medium"
+                               Color="@(CurrentRepeatMode != RepeatMode.Off ? Color.Primary : Color.Default)"
+                               OnClick="CycleRepeat"/>
             </div>
         }
     </div>
@@ -187,8 +195,28 @@
         ?? "No playlist selected";
 
     private bool IsPlaying => State.Player is PlayerState.Playing;
-    private bool CanPlayNext => CurrentIndex is { } i && i < Videos.Count - 1;
-    private bool CanPlayPrevious => CurrentIndex is { } and > 0;
+    private bool IsShuffleEnabled => State.Queue.ShuffleEnabled;
+    private RepeatMode CurrentRepeatMode => State.Queue.RepeatMode;
+
+    private bool CanPlayNext =>
+        CurrentIndex is not null && Videos.Count > 0 &&
+        (CurrentRepeatMode != RepeatMode.Off || IsShuffleEnabled
+            ? true
+            : CurrentIndex is { } i && i < Videos.Count - 1);
+
+    private bool CanPlayPrevious =>
+        CurrentIndex is not null && Videos.Count > 0 &&
+        (IsShuffleEnabled
+            ? !State.Queue.PlaybackHistory.IsEmpty
+            : CurrentIndex is { } and > 0);
+
+    private string RepeatIcon => CurrentRepeatMode switch
+    {
+        RepeatMode.One => Icons.Material.Filled.RepeatOne,
+        _ => Icons.Material.Filled.Repeat
+    };
+
+
 
     private bool CanUndo => State.Queue.CanUndo;
     private bool CanRedo => State.Queue.CanRedo;
@@ -293,18 +321,33 @@
 
     private Task PlayNext()
     {
-        if (Store == null) return Task.CompletedTask;
-        return CanPlayNext
-            ? Store.Dispatch(new YtAction.SelectVideo(CurrentIndex!.Value + 1, Autoplay: true))
-            : Task.CompletedTask;
+        if (Store == null || !CanPlayNext) return Task.CompletedTask;
+        return Store.Dispatch(new YtAction.NextRequested());
     }
 
     private Task PlayPrevious()
     {
+        if (Store == null || !CanPlayPrevious) return Task.CompletedTask;
+        return Store.Dispatch(new YtAction.PrevRequested());
+    }
+
+    private Task ToggleShuffle()
+    {
         if (Store == null) return Task.CompletedTask;
-        return CanPlayPrevious
-            ? Store.Dispatch(new YtAction.SelectVideo(CurrentIndex!.Value - 1, Autoplay: true))
-            : Task.CompletedTask;
+        return Store.Dispatch(new YtAction.ShuffleSet(!IsShuffleEnabled));
+    }
+
+    private Task CycleRepeat()
+    {
+        if (Store == null) return Task.CompletedTask;
+        var next = CurrentRepeatMode switch
+        {
+            RepeatMode.Off => RepeatMode.All,
+            RepeatMode.All => RepeatMode.One,
+            RepeatMode.One => RepeatMode.Off,
+            _ => RepeatMode.Off
+        };
+        return Store.Dispatch(new YtAction.RepeatSet(next));
     }
     
     [JSInvokable]

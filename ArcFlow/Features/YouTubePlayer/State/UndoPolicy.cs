@@ -7,4 +7,9 @@ public static class UndoPolicy
 
     public static bool IsBoundary(YtAction action) => action is
         YtAction.PlaylistLoaded or YtAction.SelectPlaylist;
+
+    public static bool IsPlaybackTransient(YtAction action) => action is
+        YtAction.NextRequested or YtAction.PrevRequested
+        or YtAction.PlaybackAdvanced or YtAction.PlaybackStopped
+        or YtAction.ShuffleSet or YtAction.RepeatSet;
 }

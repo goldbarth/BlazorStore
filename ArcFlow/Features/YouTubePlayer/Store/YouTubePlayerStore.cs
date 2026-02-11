@@ -116,8 +116,13 @@ public sealed class YouTubePlayerStore
             return ReduceRedo(state);
 
         var preSnapshot = QueueSnapshot.FromQueueState(state.Queue);
+        var oldVideosRef = state.Queue.Videos;
         var newState = ReduceStandard(state, action);
         newState = ApplyHistoryPolicy(state.Queue, newState, action, preSnapshot);
+
+        // Repair playback structures if videos changed
+        if (!ReferenceEquals(oldVideosRef, newState.Queue.Videos))
+            newState = newState with { Queue = PlaybackNavigation.RepairPlaybackStructures(newState.Queue) };
 
         return newState with { Queue = newState.Queue.Validate() };
     }
@@ -135,6 +140,13 @@ public sealed class YouTubePlayerStore
             YtAction.PlaylistLoaded playlistLoaded => HandlePlaylistLoaded(state, playlistLoaded),
             YtAction.PlayerStateChanged stateChanged => HandlePlayerStateChanged(state, stateChanged),
             YtAction.VideoEnded => HandleVideoEnded(state),
+            // Playback navigation
+            YtAction.ShuffleSet shuffleSet => HandleShuffleSet(state, shuffleSet),
+            YtAction.RepeatSet repeatSet => HandleRepeatSet(state, repeatSet),
+            YtAction.NextRequested => HandleNextRequested(state),
+            YtAction.PrevRequested => HandlePrevRequested(state),
+            YtAction.PlaybackAdvanced => state,
+            YtAction.PlaybackStopped => state,
             // Actions that are ONLY processed in Effects (no state update)
             YtAction.CreatePlaylist => state,
             YtAction.AddVideo => state,
@@ -189,6 +201,19 @@ public sealed class YouTubePlayerStore
     private static YouTubePlayerState ApplyHistoryPolicy(
         QueueState oldQueue, YouTubePlayerState newState, YtAction action, QueueSnapshot preSnapshot)
     {
+        // Playback transient actions preserve undo history without modification
+        if (UndoPolicy.IsPlaybackTransient(action))
+        {
+            return newState with
+            {
+                Queue = newState.Queue with
+                {
+                    Past = oldQueue.Past,
+                    Future = oldQueue.Future
+                }
+            };
+        }
+
         if (UndoPolicy.IsBoundary(action))
         {
             return newState with
@@ -242,16 +267,19 @@ public sealed class YouTubePlayerStore
     
     private YouTubePlayerState HandleSelectPlaylist(YouTubePlayerState state, YtAction.SelectPlaylist selectPlaylist)
     {
-        if (state.Queue.SelectedPlaylistId == selectPlaylist.PlaylistId) 
+        if (state.Queue.SelectedPlaylistId == selectPlaylist.PlaylistId)
             return state;
-        
+
         return state with
         {
             Queue = state.Queue with
             {
                 SelectedPlaylistId = selectPlaylist.PlaylistId,
                 Videos = [],
-                CurrentIndex = null
+                CurrentIndex = null,
+                CurrentItemId = null,
+                ShuffleOrder = ImmutableList<Guid>.Empty,
+                PlaybackHistory = ImmutableList<Guid>.Empty
             },
             Player = new PlayerState.Empty()
         };
@@ -259,17 +287,31 @@ public sealed class YouTubePlayerStore
     
     private static YouTubePlayerState HandleSelectVideo(YouTubePlayerState state, YtAction.SelectVideo action)
     {
-        if (state.Queue.CurrentIndex == action.Index && 
+        if (state.Queue.CurrentIndex == action.Index &&
             state.Player is not PlayerState.Empty) return state;
-        
-        if (state.Queue.Videos.Count == 0 || action.Index < 0 
+
+        if (state.Queue.Videos.Count == 0 || action.Index < 0
             || action.Index >= state.Queue.Videos.Count) return state;
 
         var video = state.Queue.Videos[action.Index];
 
+        // Push old CurrentItemId to PlaybackHistory if shuffle is enabled
+        var history = state.Queue.PlaybackHistory;
+        if (state.Queue.ShuffleEnabled && state.Queue.CurrentItemId.HasValue)
+        {
+            history = history.Add(state.Queue.CurrentItemId.Value);
+            if (history.Count > QueueState.PlaybackHistoryLimit)
+                history = history.RemoveAt(0);
+        }
+
         return state with
         {
-            Queue = state.Queue with { CurrentIndex = action.Index },
+            Queue = state.Queue with
+            {
+                CurrentIndex = action.Index,
+                CurrentItemId = video.Id,
+                PlaybackHistory = history
+            },
             Player = new PlayerState.Loading(video.YouTubeId, action.Autoplay)
         };
     }
@@ -337,7 +379,10 @@ public sealed class YouTubePlayerStore
                 Videos = playlistLoaded.Playlist.VideoItems
                     .OrderBy(v => v.Position)
                     .ToImmutableList(),
-                CurrentIndex = null
+                CurrentIndex = null,
+                CurrentItemId = null,
+                ShuffleOrder = ImmutableList<Guid>.Empty,
+                PlaybackHistory = ImmutableList<Guid>.Empty
             }
         };
     }
@@ -382,7 +427,95 @@ public sealed class YouTubePlayerStore
     {
         return state;
     }
-    
+
+    private static YouTubePlayerState HandleShuffleSet(YouTubePlayerState state, YtAction.ShuffleSet action)
+    {
+        if (action.Enabled)
+        {
+            var seed = action.Seed ?? Environment.TickCount;
+            var shuffleOrder = PlaybackNavigation.GenerateShuffleOrder(
+                state.Queue.Videos, state.Queue.CurrentItemId, seed);
+
+            return state with
+            {
+                Queue = state.Queue with
+                {
+                    ShuffleEnabled = true,
+                    ShuffleSeed = seed,
+                    ShuffleOrder = shuffleOrder,
+                    PlaybackHistory = ImmutableList<Guid>.Empty
+                }
+            };
+        }
+        else
+        {
+            return state with
+            {
+                Queue = state.Queue with
+                {
+                    ShuffleEnabled = false,
+                    ShuffleOrder = ImmutableList<Guid>.Empty,
+                    PlaybackHistory = ImmutableList<Guid>.Empty
+                }
+            };
+        }
+    }
+
+    private static YouTubePlayerState HandleRepeatSet(YouTubePlayerState state, YtAction.RepeatSet action)
+    {
+        return state with
+        {
+            Queue = state.Queue with { RepeatMode = action.Mode }
+        };
+    }
+
+    private static YouTubePlayerState HandleNextRequested(YouTubePlayerState state)
+    {
+        var (decision, newQueue) = PlaybackNavigation.ComputeNext(state.Queue);
+
+        return decision switch
+        {
+            PlaybackDecision.AdvanceTo adv => ApplyAdvanceTo(state, newQueue, adv.ItemId),
+            PlaybackDecision.Stop => state with
+            {
+                Queue = newQueue,
+                Player = state.Queue.CurrentItemId.HasValue
+                    ? new PlayerState.Paused(
+                        state.Queue.Videos.FirstOrDefault(v => v.Id == state.Queue.CurrentItemId.Value)?.YouTubeId ?? "")
+                    : new PlayerState.Empty()
+            },
+            _ => state with { Queue = newQueue }
+        };
+    }
+
+    private static YouTubePlayerState HandlePrevRequested(YouTubePlayerState state)
+    {
+        var (decision, newQueue) = PlaybackNavigation.ComputePrev(state.Queue);
+
+        return decision switch
+        {
+            PlaybackDecision.AdvanceTo adv => ApplyAdvanceTo(state, newQueue, adv.ItemId),
+            _ => state with { Queue = newQueue }
+        };
+    }
+
+    private static YouTubePlayerState ApplyAdvanceTo(YouTubePlayerState state, QueueState queue, Guid itemId)
+    {
+        var idx = queue.Videos.FindIndex(v => v.Id == itemId);
+        if (idx < 0) return state with { Queue = queue };
+
+        var video = queue.Videos[idx];
+        return state with
+        {
+            Queue = queue with
+            {
+                CurrentIndex = idx,
+                CurrentItemId = itemId
+            },
+            Player = new PlayerState.Loading(video.YouTubeId, true)
+        };
+    }
+
     #endregion
 
     #region Effects
@@ -421,7 +554,14 @@ public sealed class YouTubePlayerStore
 
             case YtAction.VideoEnded:
             {
-                await SelectNextVideoWithAutoplay();
+                await Dispatch(new YtAction.NextRequested());
+                break;
+            }
+
+            case YtAction.NextRequested:
+            case YtAction.PrevRequested:
+            {
+                await LoadCurrentVideoFromState();
                 break;
             }
             
@@ -644,10 +784,39 @@ public sealed class YouTubePlayerStore
         }
     }
     
-    private async Task SelectNextVideoWithAutoplay()
+    private async Task LoadCurrentVideoFromState()
     {
-        if (State.Queue.CurrentIndex is { } i && i < State.Queue.Videos.Count - 1)
-            await Dispatch(new YtAction.SelectVideo(i + 1, Autoplay: true));
+        if (State.Player is not PlayerState.Loading loading)
+            return;
+
+        var videoId = loading.VideoId;
+        var autoplay = loading.Autoplay;
+
+        try
+        {
+            var playerExists = await _jsRuntime.InvokeAsync<bool>("eval",
+                "document.getElementById('youtube-player-container') !== null");
+
+            if (!playerExists)
+            {
+                _logger.LogWarning("YouTube player container not found, skipping video load");
+                return;
+            }
+
+            await _jsRuntime.InvokeVoidAsync(
+                "YouTubePlayerInterop.loadVideo",
+                videoId,
+                autoplay
+            );
+        }
+        catch (JSException ex)
+        {
+            _logger.LogWarning(ex, "JS error while loading video, player may not be ready yet");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error while loading video via playback navigation");
+        }
     }
     
     private async Task AddVideoToPlaylist(YtAction.AddVideo addVideo)
