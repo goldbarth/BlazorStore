@@ -101,6 +101,12 @@ public class EffectGatingTests
             Calls.Add("UpdateVideoPositions");
             return Task.CompletedTask;
         }
+
+        public Task ReplaceAllPlaylistsAsync(List<Playlist> playlists)
+        {
+            Calls.Add("ReplaceAllPlaylists");
+            return Task.CompletedTask;
+        }
     }
 
     private class FakeJSRuntime : IJSRuntime

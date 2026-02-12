@@ -12,6 +12,8 @@ public record YouTubePlayerState(
     QueueState Queue,
     PlayerState Player,
     ImmutableList<Notification> Notifications,
+    ImportExportState ImportExport,
+    PersistenceState Persistence,
     OperationError? LastError = null
 )
 {
@@ -19,7 +21,9 @@ public record YouTubePlayerState(
         Playlists: new PlaylistsState.Loading(),
         Queue: new QueueState(),
         Player: new PlayerState.Empty(),
-        Notifications: ImmutableList<Notification>.Empty
+        Notifications: ImmutableList<Notification>.Empty,
+        ImportExport: new ImportExportState.Idle(),
+        Persistence: new PersistenceState()
         )
     {
     }

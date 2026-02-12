@@ -14,4 +14,6 @@ public interface IPlaylistService
     Task AddVideoToPlaylistAsync(Guid playlistId, VideoItem video);
     Task RemoveVideoFromPlaylistAsync(Guid playlistId, Guid videoId);
     Task UpdateVideoPositionsAsync(Guid playlistId, List<VideoItem> videos);
+
+    Task ReplaceAllPlaylistsAsync(List<Playlist> playlists);
 }

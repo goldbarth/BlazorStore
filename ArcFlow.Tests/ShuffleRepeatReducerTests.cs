@@ -425,6 +425,7 @@ public class ShuffleRepeatReducerTests
         public Task AddVideoToPlaylistAsync(Guid playlistId, VideoItem video) => Task.CompletedTask;
         public Task RemoveVideoFromPlaylistAsync(Guid playlistId, Guid videoId) => Task.CompletedTask;
         public Task UpdateVideoPositionsAsync(Guid playlistId, List<VideoItem> videos) => Task.CompletedTask;
+        public Task ReplaceAllPlaylistsAsync(List<Playlist> playlists) => Task.CompletedTask;
     }
 
     private class FakeJSRuntime : IJSRuntime

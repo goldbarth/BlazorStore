@@ -94,4 +94,15 @@ public class PlaylistService(ApplicationDbContext context) : IPlaylistService
 
         await context.SaveChangesAsync();
     }
+
+    // SQL: DELETE all, then INSERT all (full snapshot replace)
+    public async Task ReplaceAllPlaylistsAsync(List<Playlist> playlists)
+    {
+        context.VideoItems.RemoveRange(context.VideoItems);
+        context.Playlists.RemoveRange(context.Playlists);
+        await context.SaveChangesAsync();
+
+        await context.Playlists.AddRangeAsync(playlists);
+        await context.SaveChangesAsync();
+    }
 }

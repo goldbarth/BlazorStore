@@ -1,0 +1,101 @@
+<MudDrawer Open="Open" OpenChanged="OnOpenChanged" Anchor="Anchor.End"
+           Variant="@DrawerVariant.Temporary" Width="400px" Elevation="4">
+    <MudDrawerHeader>
+        <MudText Typo="Typo.h6">Import Playlists</MudText>
+    </MudDrawerHeader>
+    <div class="pa-4">
+        <MudText Typo="Typo.subtitle2" Class="mb-2">Upload a JSON file</MudText>
+        <InputFile accept=".json" OnChange="OnFileSelected" />
+
+        <MudDivider Class="my-4" />
+
+        <MudTextField @bind-Value="_jsonContent"
+                      Label="Or paste JSON here"
+                      Lines="8"
+                      Variant="Variant.Outlined"
+                      Placeholder="Paste JSON here..." />
+
+        @if (ImportExportState is ImportExportState.ImportParsing)
+        {
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mt-3" />
+        }
+        else if (ImportExportState is ImportExportState.ImportFailed failed)
+        {
+            <MudAlert Severity="Severity.Error" Class="mt-3">
+                @GetErrorMessage(failed.Error)
+            </MudAlert>
+        }
+        else if (ImportExportState is ImportExportState.ImportSucceeded succeeded)
+        {
+            <MudAlert Severity="Severity.Success" Class="mt-3">
+                Imported @succeeded.PlaylistCount playlist(s) with @succeeded.VideoCount video(s).
+            </MudAlert>
+        }
+
+        <div class="d-flex justify-end gap-2 mt-4">
+            <MudButton OnClick="Cancel" Color="Color.Default">Cancel</MudButton>
+            <MudButton Color="Color.Dark"
+                       OnClick="Submit"
+                       Disabled="@(string.IsNullOrWhiteSpace(_jsonContent))">
+                Import
+            </MudButton>
+        </div>
+    </div>
+</MudDrawer>
+
+@code {
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+    [Parameter] public ImportExportState ImportExportState { get; set; } = new ImportExportState.Idle();
+    [Parameter] public EventCallback<string> OnSubmit { get; set; }
+
+    private string _jsonContent = string.Empty;
+    private const long MaxFileSize = 5 * 1024 * 1024; // 5 MB
+
+    private async Task OnFileSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file is null) return;
+
+        await using var stream = file.OpenReadStream(MaxFileSize);
+        using var reader = new StreamReader(stream);
+        _jsonContent = await reader.ReadToEndAsync();
+    }
+
+    private async Task Submit()
+    {
+        if (string.IsNullOrWhiteSpace(_jsonContent)) return;
+        await OnSubmit.InvokeAsync(_jsonContent);
+    }
+
+    private async Task Cancel() => await CloseDrawer();
+
+    private async Task OnOpenChanged(bool open)
+    {
+        if (!open) ResetForm();
+        Open = open;
+        await OpenChanged.InvokeAsync(open);
+    }
+
+    private async Task CloseDrawer()
+    {
+        ResetForm();
+        Open = false;
+        await OpenChanged.InvokeAsync(false);
+    }
+
+    private void ResetForm()
+    {
+        _jsonContent = string.Empty;
+    }
+
+    private static string GetErrorMessage(ImportError error) => error switch
+    {
+        ImportError.ParseError e => $"Parse error: {e.Message}",
+        ImportError.UnsupportedSchema e => $"Unsupported schema version {e.Found} (max: {e.MaxSupported})",
+        ImportError.ValidationError e => $"Validation error in '{e.Field}': {e.Message}",
+        ImportError.IdCollision e => $"ID collision: {e.EntityType} {e.CollidingId}",
+        ImportError.PersistenceFailed e => $"Save failed: {e.Message}",
+        _ => "Unknown import error"
+    };
+}

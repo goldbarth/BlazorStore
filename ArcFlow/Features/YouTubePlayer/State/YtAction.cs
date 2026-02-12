@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using ArcFlow.Features.YouTubePlayer.ImportExport;
 using ArcFlow.Features.YouTubePlayer.Models;
 
 namespace ArcFlow.Features.YouTubePlayer.State;
@@ -92,4 +93,47 @@ public record YtAction
 
     /// <summary>Remove a notification after the user dismissed it.</summary>
     public sealed record DismissNotification(Guid CorrelationId) : YtAction;
+
+    // ── Import / Export ──────────────────────────────────────────
+
+    /// <summary>User clicked "Export".</summary>
+    public sealed record ExportRequested : YtAction;
+
+    /// <summary>DTO serialised, ready for download.</summary>
+    public sealed record ExportPrepared(ExportEnvelopeV1 Envelope) : YtAction;
+
+    /// <summary>Browser download triggered successfully.</summary>
+    public sealed record ExportSucceeded : YtAction;
+
+    /// <summary>Export failed at some stage.</summary>
+    public sealed record ExportFailed(ExportError Error) : YtAction;
+
+    /// <summary>User selected a file for import.</summary>
+    public sealed record ImportRequested(string JsonContent) : YtAction;
+
+    /// <summary>JSON parsed into the DTO.</summary>
+    public sealed record ImportParsed(ExportEnvelopeV1 Envelope) : YtAction;
+
+    /// <summary>Validation passed.</summary>
+    public sealed record ImportValidated(ExportEnvelopeV1 Envelope) : YtAction;
+
+    /// <summary>Playlists converted and ready to replace state.</summary>
+    public sealed record ImportApplied(ImmutableList<Playlist> Playlists, Guid? SelectedPlaylistId) : YtAction;
+
+    /// <summary>Import completed — summary counts.</summary>
+    public sealed record ImportSucceeded(int PlaylistCount, int VideoCount) : YtAction;
+
+    /// <summary>Import failed at some stage.</summary>
+    public sealed record ImportFailed(ImportError Error) : YtAction;
+
+    // ── Persistence ──────────────────────────────────────────────
+
+    /// <summary>Request a DB write.</summary>
+    public sealed record PersistRequested : YtAction;
+
+    /// <summary>DB write succeeded.</summary>
+    public sealed record PersistSucceeded : YtAction;
+
+    /// <summary>DB write failed.</summary>
+    public sealed record PersistFailed(string Message, Exception? Inner = null) : YtAction;
 }

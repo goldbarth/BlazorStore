@@ -1,0 +1,49 @@
+<div class="import-export-toolbar">
+    <div class="backup-group">
+        <MudText Typo="Typo.caption" Class="backup-label" Color="Color.Default">Backup</MudText>
+        <div class="import-export-toolbar__buttons">
+            <MudButton StartIcon="@Icons.Material.Filled.FileDownload"
+                       Size="Size.Small"
+                       Color="Color.Default"
+                       Variant="Variant.Outlined"
+                       OnClick="OnExportClick"
+                       Disabled="@(State.ImportExport is ImportExportState.ExportInProgress
+                                 || State.Playlists is not PlaylistsState.Loaded)">
+                Export
+            </MudButton>
+
+            <MudButton StartIcon="@Icons.Material.Filled.FileUpload"
+                       Size="Size.Small"
+                       Color="Color.Default"
+                       Variant="Variant.Outlined"
+                       OnClick="OnImportClick"
+                       Disabled="@(State.ImportExport is ImportExportState.ImportParsing)">
+                Import
+            </MudButton>
+
+            @if (State.Persistence is { IsDirty: true, LastPersistError: not null })
+            {
+                <MudChip T="string"
+                         Color="Color.Error"
+                         Size="Size.Small"
+                         Icon="@Icons.Material.Filled.ErrorOutline"
+                         OnClose="@(async _ => await OnPersistRetryClick.InvokeAsync())">
+                    Save failed &mdash;
+                    <MudButton Size="Size.Small"
+                               Color="Color.Error"
+                               Variant="Variant.Text"
+                               OnClick="OnPersistRetryClick">
+                        Retry
+                    </MudButton>
+                </MudChip>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public YouTubePlayerState State { get; set; } = default!;
+    [Parameter] public EventCallback OnExportClick { get; set; }
+    [Parameter] public EventCallback OnImportClick { get; set; }
+    [Parameter] public EventCallback OnPersistRetryClick { get; set; }
+}

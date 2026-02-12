@@ -4,7 +4,9 @@
       "Bash(dir:*)",
       "Bash(findstr:*)",
       "Bash(dotnet build:*)",
-      "Bash(dotnet test:*)"
+      "Bash(dotnet test:*)",
+      "Bash(cd:*)",
+      "Bash(find:*)"
     ]
   }
 }

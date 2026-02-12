@@ -10,7 +10,7 @@ public static class UndoPolicy
         YtAction.SelectVideo or YtAction.SortChanged;
 
     public static bool IsBoundary(YtAction action) => action is
-        YtAction.PlaylistLoaded or YtAction.SelectPlaylist;
+        YtAction.PlaylistLoaded or YtAction.SelectPlaylist or YtAction.ImportApplied;
 
     public static bool IsPlaybackTransient(YtAction action) => action is
         YtAction.NextRequested or YtAction.PrevRequested

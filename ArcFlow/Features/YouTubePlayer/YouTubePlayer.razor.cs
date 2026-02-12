@@ -21,6 +21,7 @@ public partial class YouTubePlayer : ComponentBase, IAsyncDisposable
     
     private bool _createPlaylistDrawerOpen;
     private bool _addVideoDrawerOpen;
+    private bool _importDrawerOpen;
     private bool _sortableInitialized;
     
     private readonly HashSet<Guid> _shownNotifications = [];
@@ -226,4 +227,9 @@ public partial class YouTubePlayer : ComponentBase, IAsyncDisposable
     private void OpenDrawer() => _createPlaylistDrawerOpen = true;
 
     private void OpenAddVideoDrawer() => _addVideoDrawerOpen = true;
+
+    private Task OnExportClick() => Store.Dispatch(new YtAction.ExportRequested());
+    private void OpenImportDrawer() => _importDrawerOpen = true;
+    private Task OnImportSubmit(string json) => Store.Dispatch(new YtAction.ImportRequested(json));
+    private Task OnPersistRetry() => Store.Dispatch(new YtAction.PersistRequested());
 }

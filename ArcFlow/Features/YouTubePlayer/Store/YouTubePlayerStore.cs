@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Threading.Channels;
+using ArcFlow.Features.YouTubePlayer.ImportExport;
 using ArcFlow.Features.YouTubePlayer.Models;
 using ArcFlow.Features.YouTubePlayer.Service;
 using ArcFlow.Features.YouTubePlayer.State;
@@ -155,6 +156,21 @@ public sealed class YouTubePlayerStore
             // Notifications
             YtAction.ShowNotification notification => HandleShowNotification(state, notification),
             YtAction.DismissNotification dismiss => HandleDismissNotification(state, dismiss),
+            // Import / Export
+            YtAction.ExportRequested => state with { ImportExport = new ImportExportState.ExportInProgress() },
+            YtAction.ExportPrepared ep => state with { ImportExport = new ImportExportState.ExportSucceeded(ep.Envelope.ExportedAtUtc) },
+            YtAction.ExportSucceeded => state with { ImportExport = new ImportExportState.Idle() },
+            YtAction.ExportFailed ef => state with { ImportExport = new ImportExportState.ExportFailed(ef.Error) },
+            YtAction.ImportRequested => state with { ImportExport = new ImportExportState.ImportParsing() },
+            YtAction.ImportParsed ip => state with { ImportExport = new ImportExportState.ImportParsed(ip.Envelope) },
+            YtAction.ImportValidated iv => state with { ImportExport = new ImportExportState.ImportValidated(iv.Envelope) },
+            YtAction.ImportApplied ia => HandleImportApplied(state, ia),
+            YtAction.ImportSucceeded isuc => state with { ImportExport = new ImportExportState.ImportSucceeded(isuc.PlaylistCount, isuc.VideoCount) },
+            YtAction.ImportFailed ifail => state with { ImportExport = new ImportExportState.ImportFailed(ifail.Error) },
+            // Persistence
+            YtAction.PersistRequested => state,
+            YtAction.PersistSucceeded => state with { Persistence = state.Persistence with { IsDirty = false, LastPersistAttemptUtc = DateTime.UtcNow, LastPersistError = null } },
+            YtAction.PersistFailed pf => state with { Persistence = state.Persistence with { LastPersistAttemptUtc = DateTime.UtcNow, LastPersistError = pf.Message } },
             // Compiler forces you to handle all actions
             _ => throw new UnreachableException($"Unhandled action: {action.GetType().Name}")
         };
@@ -297,7 +313,7 @@ public sealed class YouTubePlayerStore
 
         // Push old CurrentItemId to PlaybackHistory if shuffle is enabled
         var history = state.Queue.PlaybackHistory;
-        if (state.Queue.ShuffleEnabled && state.Queue.CurrentItemId.HasValue)
+        if (state.Queue is { ShuffleEnabled: true, CurrentItemId: not null })
         {
             history = history.Add(state.Queue.CurrentItemId.Value);
             if (history.Count > QueueState.PlaybackHistoryLimit)
@@ -513,6 +529,18 @@ public sealed class YouTubePlayerStore
         };
     }
 
+    private static YouTubePlayerState HandleImportApplied(YouTubePlayerState state, YtAction.ImportApplied action)
+    {
+        return state with
+        {
+            Playlists = new PlaylistsState.Loaded(action.Playlists),
+            Queue = new QueueState { SelectedPlaylistId = action.SelectedPlaylistId },
+            Player = new PlayerState.Empty(),
+            ImportExport = new ImportExportState.ImportApplied(),
+            Persistence = state.Persistence with { IsDirty = true }
+        };
+    }
+
     #endregion
 
     #region Effects
@@ -573,9 +601,107 @@ public sealed class YouTubePlayerStore
                 await CreateAndSelectPlaylist(cp);
                 break;
             }
+
+            case YtAction.ExportRequested:
+            {
+                await RunExportEffect();
+                break;
+            }
+
+            case YtAction.ImportApplied:
+            case YtAction.PersistRequested:
+            {
+                await RunPersistEffect();
+                break;
+            }
         }
     }
     
+    private async Task RunExportEffect()
+    {
+        if (State.Playlists is not PlaylistsState.Loaded loaded)
+        {
+            await Dispatch(new YtAction.ExportFailed(
+                new ExportError.SerializationFailed("No playlists loaded")));
+            return;
+        }
+
+        ExportEnvelopeV1 envelope;
+        string json;
+        try
+        {
+            envelope = ExportMapper.ToEnvelope(loaded.Items, State.Queue.SelectedPlaylistId);
+            json = ExportSerializer.Serialize(envelope);
+        }
+        catch (Exception ex)
+        {
+            await Dispatch(new YtAction.ExportFailed(
+                new ExportError.SerializationFailed(ex.Message, ex)));
+            return;
+        }
+
+        await Dispatch(new YtAction.ExportPrepared(envelope));
+
+        var fileName = $"arcflow-export-{DateTime.UtcNow:yyyy-MM-dd}.json";
+        try
+        {
+            await _jsRuntime.InvokeVoidAsync("ExportInterop.downloadFile", fileName, json);
+        }
+        catch (Exception ex)
+        {
+            await Dispatch(new YtAction.ExportFailed(
+                new ExportError.InteropFailed(ex.Message, ex)));
+            return;
+        }
+
+        await Dispatch(new YtAction.ExportSucceeded());
+    }
+
+    private async Task RunPersistEffect()
+    {
+        if (!State.Persistence.IsDirty)
+            return;
+
+        if (State.Playlists is not PlaylistsState.Loaded loaded)
+        {
+            await Dispatch(new YtAction.PersistFailed("No playlists loaded to persist"));
+            return;
+        }
+
+        try
+        {
+            var snapshot = loaded.Items.Select(p => new Playlist
+            {
+                Id = p.Id,
+                Name = p.Name,
+                Description = p.Description,
+                CreatedAt = p.CreatedAt,
+                UpdatedAt = p.UpdatedAt,
+                VideoItems = p.VideoItems.Select(v => new VideoItem
+                {
+                    Id = v.Id,
+                    YouTubeId = v.YouTubeId,
+                    Title = v.Title,
+                    ThumbnailUrl = v.ThumbnailUrl,
+                    Duration = v.Duration,
+                    AddedAt = v.AddedAt,
+                    Position = v.Position,
+                    PlaylistId = p.Id
+                }).ToList()
+            }).ToList();
+
+            await _playlistService.ReplaceAllPlaylistsAsync(snapshot);
+            await Dispatch(new YtAction.PersistSucceeded());
+
+            _logger.LogInformation("Persist succeeded: {PlaylistCount} playlists written", snapshot.Count);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Persist failed");
+            await Dispatch(new YtAction.PersistFailed(ex.Message, ex));
+        }
+    }
+
     private async Task LoadAndSelectInitialPlaylist()
     {
         var context = OperationContext.Create("LoadAndSelectInitialPlaylist");
