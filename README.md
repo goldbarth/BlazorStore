@@ -1,10 +1,10 @@
-# 🏗️ ArcFlow
+# BlazorStore
 
->Arcflow — Learning architecture by building it.
-**Store-driven** Blazor Web App architecture showcase with **controlled JS interop**.
+Blazor Server architecture showcase — store-driven state management with controlled JS interop.
 
-The focus is on explicit state transitions, clear accountability, and comprehensible architectural decisions.
-## Documentation
+Explicit state transitions, isolated side effects, documented decisions.
 
-- 🇩🇪 [Deutsch](ArcFlow/docs/de/README_DE.md)
-- 🇬🇧 [English](ArcFlow/docs/en/README_EN.md)
+## Dokumentation
+
+- 🇩🇪 [Deutsch](BlazorStore/docs/de/README_DE.md)
+- 🇬🇧 [English](BlazorStore/docs/en/README_EN.md)
