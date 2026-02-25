@@ -1,0 +1,53 @@
+@inherits LayoutComponentBase
+
+<MudThemeProvider />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<div class="app-root">
+    <MudLayout>
+        <MudAppBar Elevation="1" Fixed="true"
+                   Style="background-color: #1a1a2e;">
+            <MudIconButton Icon="@Icons.Material.Filled.Menu"
+                           Color="Color.Inherit" Edge="Edge.Start"
+                           Class="toggle-btn"
+                           OnClick="ToggleDrawer" />
+            <MudText Typo="Typo.h6" Class="ml-2">Arc Flow</MudText>
+            <MudSpacer />
+            <MudLink Href="https://github.com/goldbarth/BlazorStore" Target="_blank"
+                     Color="Color.Inherit" Underline="Underline.Hover">
+                About
+            </MudLink>
+        </MudAppBar>
+
+        <MudDrawer @bind-Open="_drawerOpen"
+                   ClipMode="DrawerClipMode.Always"
+                   Variant="DrawerVariant.Mini"
+                   Elevation="2"
+                   Width="250px" MiniWidth="60px"
+                   Style="background-image: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);">
+            <NavMenu />
+        </MudDrawer>
+
+        <MudMainContent Class="px-4 pb-4"
+                        Style="background-image: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%); min-height: 100vh;">
+            @Body
+        </MudMainContent>
+    </MudLayout>
+</div>
+
+<div id="blazor-error-ui" data-nosnippet>
+    An unhandled error has occurred.
+    <a href="." class="reload">Reload</a>
+    <span class="dismiss">🗙</span>
+</div>
+
+@code {
+    private bool _drawerOpen = true;
+
+    private void ToggleDrawer()
+    {
+        _drawerOpen = !_drawerOpen;
+    }
+}
